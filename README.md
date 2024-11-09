@@ -6,6 +6,8 @@ Handle Watcher is a C++ program designed to close process handles pointing to it
 # Quick explanation on how Handle Watcher works
 The way it blocks memory from being accessed is simple: we use NtQuerySystemInformation to get information about all handles in the system. With this information, we can determine which process the handles are pointing to, which process owns the handle, the ACCESS_MASK of all handles, and more.
 
+I used direct syscalls pretty much everything. It wasn't really necessary for the repository but I figured that some people might want it that way.
+
 The first step we take is to make sure that the handle we’re inspecting does not belong to our process, and that the handle contains at least one of these access rights (you can add/remove access rights; I did it this way just because):
 - PROCESS_ALL_ACCESS `CAN WRITE TO PROCESS MEMORY`
 - PROCESS_VM_OPERATION `CAN WRITE TO PROCESS MEMORY`
