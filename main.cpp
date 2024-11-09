@@ -17,7 +17,8 @@ int main()
 
     SIZE_T bufferSize = 0x10000;
     PVOID pHandleInfo = nullptr;
-    SIZE_T zero = 0;
+    const SIZE_T zero = 0;
+    const ULONG currentProcessId = GetCurrentProcessId();
 
     NTSTATUS status = syscalls::nt_allocate_virtual_memory(
         GetCurrentProcess(),
@@ -39,9 +40,9 @@ int main()
             if (status == STATUS_INFO_LENGTH_MISMATCH) {
                 bufferSize *= 2;
 
-                LPVOID newHandleInfo = nullptr;
+                PVOID newHandleInfo = nullptr;
 
-                NTSTATUS status = syscalls::nt_allocate_virtual_memory(
+                status = syscalls::nt_allocate_virtual_memory(
                     GetCurrentProcess(),
                     &newHandleInfo,
                     0,
@@ -77,7 +78,6 @@ int main()
         }
 
         const auto handleInfo = reinterpret_cast<PSYSTEM_HANDLE_INFORMATION>(pHandleInfo);
-        const ULONG currentProcessId = GetCurrentProcessId();
 
         for (ULONG i = 0; i < handleInfo->HandleCount; ++i) {
             const SYSTEM_HANDLE& handle = handleInfo->Handles[i];
