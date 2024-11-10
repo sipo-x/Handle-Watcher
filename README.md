@@ -19,11 +19,11 @@ The first step we take is to make sure that the handle we’re inspecting does n
 
 If it doesn't, wel'll just continue with the next one.
 ```cpp
-if (handle.ProcessId == current_pid || !unauthorized_access(handle.GrantedAccess)) continue;
+if (handle.ProcessId == current_pid || !is_access_dangerous(handle.GrantedAccess)) continue;
 ```
-unauthorized_access:
+is_access_dangerous function:
 ```cpp
-bool unauthorized_access(const ACCESS_MASK access_mask)
+bool is_access_dangerous(const ACCESS_MASK access_mask)
 {
     constexpr ACCESS_MASK UNAUTHORIZED_FLAGS = PROCESS_VM_WRITE |
         PROCESS_VM_READ |
