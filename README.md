@@ -6,7 +6,7 @@ Handle Watcher is a C++ program designed to close process handles pointing to it
 # Quick explanation on how Handle Watcher works
 The way it blocks memory from being accessed is simple: we use NtQuerySystemInformation to get information about all handles in the system. With this information, we can determine which process the handles are pointing to, which process owns the handle, the ACCESS_MASK of all handles, and more.
 
-I used direct syscalls pretty much everything. It wasn't really necessary for the repository but I figured that some people might want it that way.
+I used direct syscalls for pretty much everything. It wasn't really necessary for the repository but I figured that some people might want it that way.
 
 The first step we take is to make sure that the handle we’re inspecting does not belong to our process, and that the handle contains at least one of these access rights (you can add/remove access rights; I did it this way just because):
 - PROCESS_ALL_ACCESS `CAN WRITE TO PROCESS MEMORY`
@@ -36,7 +36,6 @@ bool unauthorized_access(const ACCESS_MASK access_mask)
     return (access_mask & UNAUTHORIZED_FLAGS) != 0;
 }
 ```
-
 If we determine that the handle should be subject to further inspection, we will open a handle to the process that owns the handle.
 ```cpp
 const HANDLE hProc = syscalls::nt_open_process(PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION,
@@ -55,9 +54,9 @@ if (NT_SUCCESS(syscalls::nt_duplicate_object(
     FALSE,
     0)))
 ```
-We do this so we can finally know to which process the handle is pointing to. To do this, we simply use `GetProcessId` on `hDupHandle` and the result to our current process ID.
+We do this so we can finally know to which process the handle is pointing to. To do this, we simply use `GetProcessId` on `dup_handle` and compare the result to our current process ID.
 ```cpp
-if (GetProcessId(hDupHandle) == currentProcessId)
+if (GetProcessId(dup_handle) == current_pid)
 ```
 If we determine that the handle is pointing towards our process, we can then get the full image name of the process (`handle.ProcessId`) we're dealing with using `QueryFullProcessImageName`.
 ```cpp
