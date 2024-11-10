@@ -34,7 +34,6 @@ int main()
     }
 
     while (true) {
-        NTSTATUS status;
         do {
             status = syscalls::nt_query_system_information(16, pHandleInfo, bufferSize, nullptr);
             if (status == STATUS_INFO_LENGTH_MISMATCH) {
