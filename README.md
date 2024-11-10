@@ -19,7 +19,7 @@ The first step we take is to make sure that the handle we’re inspecting does n
 
 If it doesn't, wel'll just continue with the next one.
 ```cpp
-if (handle.ProcessId == currentProcessId || !unauthorized_access(handle.GrantedAccess)) continue;
+if (handle.ProcessId == current_pid || !unauthorized_access(handle.GrantedAccess)) continue;
 ```
 unauthorized_access:
 ```cpp
@@ -39,18 +39,18 @@ bool unauthorized_access(const ACCESS_MASK access_mask)
 
 If we determine that the handle should be subject to further inspection, we will open a handle to the process that owns the handle.
 ```cpp
-const HANDLE hProcess = syscalls::nt_open_process(PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION,
+const HANDLE hProc = syscalls::nt_open_process(PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION,
     handle.ProcessId
 );
 ```
 We take advantage of our `PROCESS_DUP_HANDLE` access to duplicate the handle that's pointing to our process.
 ```cpp
-HANDLE hDupHandle = nullptr;
+HANDLE dup_handle = nullptr;
 if (NT_SUCCESS(syscalls::nt_duplicate_object(
-    hProcess,
+    hProc,
     reinterpret_cast<HANDLE>(handle.Handle),
     GetCurrentProcess(),
-    &hDupHandle,
+    &dup_handle,
     PROCESS_QUERY_LIMITED_INFORMATION,
     FALSE,
     0)))
@@ -63,7 +63,7 @@ If we determine that the handle is pointing towards our process, we can then get
 ```cpp
 TCHAR image_name[MAX_PATH];
 DWORD nameLength = MAX_PATH;
-if (!QueryFullProcessImageName(hProcess, 0, image_name, &nameLength))
+if (!QueryFullProcessImageName(hProc, 0, image_name, &nameLength))
 {
     _tcscpy_s(image_name, MAX_PATH, _T("UNKNOWN IMAGE NAME"));
 }
@@ -71,15 +71,15 @@ if (!QueryFullProcessImageName(hProcess, 0, image_name, &nameLength))
 After doing this, to close the handle, we duplicate `handle.Handle` again, but this time using the `DUPLICATE_CLOSE_SOURCE` option. After doing this, we can simply run CloseHandle/NtClose on the handle.
 ```cpp
 if (NT_SUCCESS(syscalls::nt_duplicate_object(
-    hProcess,
+    hProc,
     reinterpret_cast<HANDLE>(handle.Handle),
     GetCurrentProcess(),
-    &hDupHandle,
+    &dup_handle,
     0,
     FALSE,
     DUPLICATE_CLOSE_SOURCE)))
 {
-    if (NT_SUCCESS(syscalls::nt_close(hDupHandle)))
+    if (NT_SUCCESS(syscalls::nt_close(dup_handle)))
     {
         printf("[closed handle] %s | ACCESS_MASK 0x%0X%\n", image_name, handle.GrantedAccess);
     }
