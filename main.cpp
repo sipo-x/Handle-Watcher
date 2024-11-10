@@ -7,19 +7,20 @@
 #include "syscall.h"
 #include "structs.h"
 
-bool get_maximum_privileges();
-bool unauthorized_access(ACCESS_MASK access_mask);
+bool get_maximum_privileges(); // function to elevate privileges.
+bool is_access_dangerous(ACCESS_MASK access_mask); // Function to determine if an access_mask is dangerous.
 
 int main()
 {
     if (!get_maximum_privileges())
-        return 1;
+        return 1; // If we fail to elevate privileges, we'll return error code 1.
 
     SIZE_T bufferSize = 0x10000;
-    PVOID pHandleInfo = nullptr;
-    const SIZE_T zero = 0;
-    const ULONG currentProcessId = GetCurrentProcessId();
+    PVOID pHandleInfo = NULL; // This is where we'll initially store the information gotten from NtQuerySystemInformation.
+    SIZE_T zero = 0;
+    const ULONG current_pid = GetCurrentProcessId();
 
+    // We allocate memory for pHandleInfo.
     NTSTATUS status = syscalls::nt_allocate_virtual_memory(
         GetCurrentProcess(),
         &pHandleInfo,
@@ -30,20 +31,21 @@ int main()
     );
 
     if (!NT_SUCCESS(status) || !pHandleInfo) {
-        return 1;
+        return 1; // We return error code 1 if NtAllocateVirtualMemory fails or if pHandleInfo is NULL.
     }
 
     while (true) {
         do {
+            // This is where we get the information from handles in the system.
             status = syscalls::nt_query_system_information(16, pHandleInfo, bufferSize, nullptr);
             if (status == STATUS_INFO_LENGTH_MISMATCH) {
                 bufferSize *= 2;
 
-                PVOID newHandleInfo = nullptr;
+                PVOID _pHandleInfo = nullptr;
 
-                status = syscalls::nt_allocate_virtual_memory(
+                syscalls::nt_allocate_virtual_memory(
                     GetCurrentProcess(),
-                    &newHandleInfo,
+                    &_pHandleInfo,
                     0,
                     (PULONG)&bufferSize,
                     MEM_COMMIT | MEM_RESERVE,
@@ -57,11 +59,11 @@ int main()
                     MEM_RELEASE
                 );
 
-                if (!NT_SUCCESS(status) || !newHandleInfo) {
+                if (!_pHandleInfo) {
                     return 1;
                 }
 
-                pHandleInfo = newHandleInfo;
+                pHandleInfo = _pHandleInfo;
             }
         } while (status == STATUS_INFO_LENGTH_MISMATCH);
 
@@ -80,42 +82,55 @@ int main()
 
         for (ULONG i = 0; i < handleInfo->HandleCount; ++i) {
             const SYSTEM_HANDLE& handle = handleInfo->Handles[i];
-            if (handle.ProcessId == currentProcessId || !unauthorized_access(handle.GrantedAccess)) continue;
+            // handle.ProcessId == current_pid checks that the handle doesn't belong to our process.
+            // !is_access_dangerous(handle.GrantedAccess) checks handle.GrantedAccess and verifies if it has dangerous access.
+            if (handle.ProcessId == current_pid || !is_access_dangerous(handle.GrantedAccess)) continue;
 
-            const HANDLE hProcess = syscalls::nt_open_process(PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION,
+            // If the condition above isn't met, we create a handle to the process that owns the handle.
+            // ^ we do this so we can duplicate the handle that's pointing to us and to get information from the process.
+            const HANDLE hProc = syscalls::nt_open_process(PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION,
                 handle.ProcessId
-            );
-            if (!hProcess || hProcess == INVALID_HANDLE_VALUE) continue;
+            ); 
 
-            HANDLE hDupHandle = nullptr;
+            /* If hProc is NULL or is invalid, we'll continue with the next handle. This might allow programs to have a handle
+             * to our process if this condition is met, but it shouldn't be. */
+            if (!hProc || hProc == INVALID_HANDLE_VALUE) continue;
+
+            HANDLE dup_handle = nullptr;
             if (NT_SUCCESS(syscalls::nt_duplicate_object(
-                hProcess,
+                hProc,
                 reinterpret_cast<HANDLE>(handle.Handle),
                 GetCurrentProcess(),
-                &hDupHandle,
-                PROCESS_QUERY_LIMITED_INFORMATION,
+                &dup_handle,
+                PROCESS_QUERY_LIMITED_INFORMATION, /* We use this so in case handle.Handle doesn't have enough access
+                                                    * to let us run GetProcessId on dup_handle, we can still do it. */
                 FALSE,
                 0)))
             {
-                if (GetProcessId(hDupHandle) == currentProcessId)
+                if (GetProcessId(dup_handle) == current_pid) // This conditional checks if the handle is pointing to us.
                 {
                     TCHAR image_name[MAX_PATH];
                     DWORD nameLength = MAX_PATH;
-                    if (!QueryFullProcessImageName(hProcess, 0, image_name, &nameLength))
+                    if (!QueryFullProcessImageName(hProc, 0, image_name, &nameLength))
                     {
+                        /* If QueryFullProcessImageName fails, we'll just set image_name to UNKNOWN IMAGE NAME.
+                         * It shouldn't fail because hProc has PROCESS_QUERY_LIMITED_INFORMATION access. */
                         _tcscpy_s(image_name, MAX_PATH, _T("UNKNOWN IMAGE NAME"));
                     }
 
+                    /* After making sure the handle is pointing to our process and getting the image name of the process,
+                     * we will duplicate the handle again, however this time we'll use the option DUPLICATE_CLOSE_SOURCE. */
                     if (NT_SUCCESS(syscalls::nt_duplicate_object(
-                        hProcess,
+                        hProc,
                         reinterpret_cast<HANDLE>(handle.Handle),
                         GetCurrentProcess(),
-                        &hDupHandle,
+                        &dup_handle,
                         0,
                         FALSE,
                         DUPLICATE_CLOSE_SOURCE)))
                     {
-                        if (NT_SUCCESS(syscalls::nt_close(hDupHandle)))
+                        if (NT_SUCCESS(syscalls::nt_close(dup_handle))) /* This line gets the job done. We've now terminated
+                                                                         * the handle. */
                         {
                             printf("[closed handle] %s | ACCESS_MASK 0x%0X%\n", image_name, handle.GrantedAccess);
                         }
@@ -124,15 +139,15 @@ int main()
                         }
                     }
                     else {
-                        syscalls::nt_close(hDupHandle);
+                        syscalls::nt_close(dup_handle);
                     }
                 }
                 else {
-                    syscalls::nt_close(hDupHandle);
+                    syscalls::nt_close(dup_handle);
                 }
             }
 
-            syscalls::nt_close(hProcess);
+            syscalls::nt_close(hProc);
         }
     }
 
@@ -146,7 +161,7 @@ int main()
     return 0;
 }
 
-bool unauthorized_access(const ACCESS_MASK access_mask)
+bool is_access_dangerous(const ACCESS_MASK access_mask)
 {
     constexpr ACCESS_MASK UNAUTHORIZED_FLAGS = PROCESS_VM_WRITE |
         PROCESS_VM_READ |
