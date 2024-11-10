@@ -87,13 +87,11 @@ int main()
             if (handle.ProcessId == current_pid || !is_access_dangerous(handle.GrantedAccess)) continue;
 
             // If the condition above isn't met, we create a handle to the process that owns the handle.
-            // ^ we do this so we can duplicate the handle that's pointing to us and to get information from the process.
+            // We do this so we can duplicate the handle that's pointing to us and to get information from the process.
             const HANDLE hProc = syscalls::nt_open_process(PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION,
                 handle.ProcessId
             ); 
 
-            /* If hProc is NULL or is invalid, we'll continue with the next handle. This might allow programs to have a handle
-             * to our process if this condition is met, but it shouldn't be. */
             if (!hProc || hProc == INVALID_HANDLE_VALUE) continue;
 
             HANDLE dup_handle = nullptr;
@@ -107,19 +105,22 @@ int main()
                 FALSE,
                 0)))
             {
-                if (GetProcessId(dup_handle) == current_pid) // This conditional checks if the handle is pointing to us.
+                if (GetProcessId(dup_handle) == current_pid) /* We check if the handle is pointing to us because that way we
+                                                              * know that we should terminate the handle. */
                 {
                     TCHAR image_name[MAX_PATH];
                     DWORD nameLength = MAX_PATH;
                     if (!QueryFullProcessImageName(hProc, 0, image_name, &nameLength))
                     {
                         /* If QueryFullProcessImageName fails, we'll just set image_name to UNKNOWN IMAGE NAME.
+                         * We do this to have something to print later. 
                          * It shouldn't fail because hProc has PROCESS_QUERY_LIMITED_INFORMATION access. */
                         _tcscpy_s(image_name, MAX_PATH, _T("UNKNOWN IMAGE NAME"));
                     }
 
                     /* After making sure the handle is pointing to our process and getting the image name of the process,
-                     * we will duplicate the handle again, however this time we'll use the option DUPLICATE_CLOSE_SOURCE. */
+                     * we will duplicate the handle again, however this time we'll use the option DUPLICATE_CLOSE_SOURCE.
+                     * We do this because this option allows us to terminate the actual handle. */
                     if (NT_SUCCESS(syscalls::nt_duplicate_object(
                         hProc,
                         reinterpret_cast<HANDLE>(handle.Handle),
@@ -135,7 +136,7 @@ int main()
                             printf("[closed handle] %s | ACCESS_MASK 0x%0X%\n", image_name, handle.GrantedAccess);
                         }
                         else {
-                            return 1;
+                            return 1; // If we fail to terminate the handle, we return error code 1.
                         }
                     }
                     else {
