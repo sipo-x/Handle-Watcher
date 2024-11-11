@@ -8,22 +8,22 @@ NTSTATUS syscalls::nt_close(HANDLE handle)
     return status;
 }
 
-HANDLE syscalls::nt_open_process(ACCESS_MASK access, DWORD pid) 
+HANDLE syscalls::nt_open_process(ACCESS_MASK access, DWORD pid)
 {
-	CLIENT_ID client_id{};
-	client_id.UniqueProcess = (HANDLE)pid;
+    CLIENT_ID client_id{};
+    client_id.UniqueProcess = (HANDLE)pid;
 
-	OBJECT_ATTRIBUTES objAttr{};
+    OBJECT_ATTRIBUTES objAttr{};
 
-	InitializeObjectAttributes(&objAttr, NULL, 0, NULL, NULL);
+    InitializeObjectAttributes(&objAttr, NULL, 0, NULL, NULL);
 
-	HANDLE handle{ NULL };
+    HANDLE handle{ NULL };
 
-	NTSTATUS status = syscall::syscall<NTSTATUS>("NtOpenProcess", &handle, access, objAttr, client_id);
-	if (NT_SUCCESS(status))
-		return handle;
+    NTSTATUS status = syscall::syscall<NTSTATUS>("NtOpenProcess", &handle, access, objAttr, client_id);
+    if (NT_SUCCESS(status))
+        return handle;
 
-	return NULL;
+    return NULL;
 }
 
 NTSTATUS syscalls::nt_open_process_token(HANDLE ProcessHandle, ACCESS_MASK access, PHANDLE TokenHandle)
@@ -108,6 +108,27 @@ NTSTATUS syscalls::nt_free_virtual_memory(
         BaseAddress,
         RegionSize,
         FreeType
+    );
+
+    return status;
+}
+
+NTSTATUS syscalls::nt_adjust_privileges_token(
+    HANDLE TokenHandle,
+    BOOLEAN DisableAllPrivileges,
+    PTOKEN_PRIVILEGES NewState,
+    ULONG BufferLength,
+    PTOKEN_PRIVILEGES PreviousState,
+    PULONG ReturnLength
+)
+{
+    NTSTATUS status = syscall::syscall<NTSTATUS>("NtAdjustPrivilegesToken",
+        TokenHandle,
+        DisableAllPrivileges,
+        NewState,
+        BufferLength,
+        PreviousState,
+        ReturnLength
     );
 
     return status;

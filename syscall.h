@@ -49,6 +49,8 @@ namespace syscalls
         PVOID* BaseAddress,
         PSIZE_T RegionSize,
         ULONG FreeType);
+    NTSTATUS nt_adjust_privileges_token(HANDLE TokenHandle, BOOLEAN DisableAllPrivileges, PTOKEN_PRIVILEGES NewState,
+        ULONG BufferLength, PTOKEN_PRIVILEGES PreviousState, PULONG ReturnLength);
 }
 
 namespace syscall
