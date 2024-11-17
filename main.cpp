@@ -7,33 +7,33 @@
 #include "syscall.h"
 #include "structs.h"
 
-bool get_maximum_privileges(); // function to elevate privileges.
-bool is_access_dangerous(ACCESS_MASK access_mask); // Function to determine if an access_mask is dangerous.
+bool get_maximum_privileges();
+bool is_access_dangerous(ACCESS_MASK access_mask);
 
-const HANDLE current_process = GetCurrentProcess();
+const HANDLE current_process{ GetCurrentProcess() };
 
 int main()
 {
     if (!get_maximum_privileges())
-        return 1; // If we fail to elevate privileges, we'll return error code 1.
+        return 1;
 
-    SIZE_T bufferSize = 0x10000;
-    PVOID pHandleInfo = NULL; // This is where we'll initially store the information gotten from NtQuerySystemInformation.
-    SIZE_T zero = 0;
-    const ULONG current_pid = GetCurrentProcessId();
+    SIZE_T bufferSize{ 0x10000 };
+    PVOID pHandleInfo{ NULL }; // This is where we'll initially store the information gotten from NtQuerySystemInformation.
+    SIZE_T zero{ 0 };
+    const ULONG current_pid{ GetCurrentProcessId() };
 
     // We allocate memory for pHandleInfo.
-    NTSTATUS status = syscalls::nt_allocate_virtual_memory(
+    NTSTATUS status{ syscalls::nt_allocate_virtual_memory(
         current_process,
         &pHandleInfo,
         0,
         (PULONG)&bufferSize,
         MEM_COMMIT | MEM_RESERVE,
         PAGE_READWRITE
-    );
+    ) };
 
     if (!NT_SUCCESS(status) || !pHandleInfo) {
-        return 1; // We return error code 1 if NtAllocateVirtualMemory fails or if pHandleInfo is NULL.
+        return 1;
     }
 
     while (true) {
@@ -43,7 +43,7 @@ int main()
             if (status == STATUS_INFO_LENGTH_MISMATCH) {
                 bufferSize *= 2;
 
-                PVOID _pHandleInfo = nullptr;
+                PVOID _pHandleInfo{ nullptr };
 
                 syscalls::nt_allocate_virtual_memory(
                     current_process,
@@ -80,21 +80,24 @@ int main()
             return 1;
         }
 
-        const auto handleInfo = reinterpret_cast<PSYSTEM_HANDLE_INFORMATION>(pHandleInfo);
+        const auto handleInfo{ reinterpret_cast<PSYSTEM_HANDLE_INFORMATION>(pHandleInfo) };
 
         for (ULONG i = 0; i < handleInfo->HandleCount; ++i) {
-            const SYSTEM_HANDLE& handle = handleInfo->Handles[i];
+            const SYSTEM_HANDLE& handle{ handleInfo->Handles[i] };
             // handle.ProcessId == current_pid checks that the handle doesn't belong to our process.
             // !is_access_dangerous(handle.GrantedAccess) checks handle.GrantedAccess and verifies if it has dangerous access.
             if (handle.ProcessId == current_pid || !is_access_dangerous(handle.GrantedAccess)) continue;
 
             // If the condition above isn't met, we create a handle to the process that owns the handle.
             // We do this so we can duplicate the handle that's pointing to us and to get information from the process.
-            const HANDLE hProc = syscalls::nt_open_process(PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION,
+            const HANDLE hProc{ syscalls::nt_open_process(PROCESS_DUP_HANDLE | PROCESS_QUERY_LIMITED_INFORMATION,
                 handle.ProcessId
-            );
+            ) };
 
-            if (!hProc || hProc == INVALID_HANDLE_VALUE) continue;
+            if (!hProc || hProc == INVALID_HANDLE_VALUE) {
+                CloseHandle(hProc);
+                continue;
+            }
 
             HANDLE dup_handle = nullptr;
             if (NT_SUCCESS(syscalls::nt_duplicate_object(
@@ -111,7 +114,7 @@ int main()
                                                               * know that we should terminate the handle. */
                 {
                     TCHAR image_name[MAX_PATH];
-                    DWORD nameLength = MAX_PATH;
+                    DWORD nameLength{ MAX_PATH };
                     if (!QueryFullProcessImageName(hProc, 0, image_name, &nameLength))
                     {
                         /* If QueryFullProcessImageName fails, we'll just set image_name to UNKNOWN IMAGE NAME.
@@ -138,7 +141,7 @@ int main()
                             printf("[closed handle] %s | ACCESS_MASK 0x%0X%\n", image_name, handle.GrantedAccess);
                         }
                         else {
-                            return 1; // If we fail to terminate the handle, we return error code 1.
+                            return 1;
                         }
                     }
                     else {
@@ -166,24 +169,24 @@ int main()
 
 bool is_access_dangerous(const ACCESS_MASK access_mask)
 {
-    constexpr ACCESS_MASK UNAUTHORIZED_FLAGS = PROCESS_VM_WRITE |
+    constexpr ACCESS_MASK UNAUTHORIZED_FLAGS{ PROCESS_VM_WRITE |
         PROCESS_VM_READ |
         PROCESS_ALL_ACCESS |
         PROCESS_VM_OPERATION |
         PROCESS_DUP_HANDLE |
         PROCESS_SET_INFORMATION |
-        PROCESS_SUSPEND_RESUME;
+        PROCESS_SUSPEND_RESUME };
 
     return (access_mask & UNAUTHORIZED_FLAGS) != 0;
 }
 
 bool get_maximum_privileges()
 {
-    HANDLE h_Token;
-    DWORD dw_TokenLength;
+    HANDLE h_Token{ };
+    DWORD dw_TokenLength{ };
     if (NT_SUCCESS(syscalls::nt_open_process_token(current_process, TOKEN_READ | TOKEN_QUERY | TOKEN_ADJUST_PRIVILEGES, &h_Token)))
     {
-        TOKEN_PRIVILEGES* privilages = new TOKEN_PRIVILEGES[100];
+        TOKEN_PRIVILEGES* privilages{ new TOKEN_PRIVILEGES[100] };
         if (GetTokenInformation(h_Token, TokenPrivileges, privilages, sizeof(TOKEN_PRIVILEGES) * 100, &dw_TokenLength))
         {
             for (int i = 0; i < privilages->PrivilegeCount; i++)
