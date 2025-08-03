@@ -1,7 +1,8 @@
 # Handle-Watcher
-Handle Watcher is a C++ program designed to close process handles pointing to its process that have dangerous access rights. The purpose of this is to block memory from being accessed by tools like, but not limited to:
+Handle Watcher is a C++ program designed to close process handles pointing to its process that have dangerous access rights. It serves as an alternative for ObRegisterCallbacks and it's purpose is to block memory from being accessed by tools like, but not limited to:
 - Cheat Engine
 - ProcessHacker / SystemInformer
+And it can also help to block injection attempts by injectors that create a handle to our process.
 
 # Quick explanation on how Handle Watcher works
 The way it blocks memory from being accessed is simple: we use NtQuerySystemInformation to get information about all handles in the system. With this information, we can determine which process the handles are pointing to, which process owns the handle, the ACCESS_MASK of all handles, and more.
