@@ -1,14 +1,15 @@
 # Handle-Watcher
+*old project, i probably did it a year before i made the repo so if its ass just let it be*
 Handle Watcher is a C++ program designed to close process handles pointing to its process that have dangerous access rights. It serves as an alternative for ObRegisterCallbacks and it's purpose is to block memory from being accessed by tools like, but not limited to:
 - Cheat Engine
 - ProcessHacker / SystemInformer
 
-And it can also help to block injection attempts by injectors that create a handle to our process.
+And it can also help to block injection attempts by injectors that create a handle to our process. Most likely the handle won't be closed fast enough to prevent the injection so separate protection regarding that should be used.
 
 # Quick explanation on how Handle Watcher works
 The way it blocks memory from being accessed is simple: we use NtQuerySystemInformation to get information about all handles in the system. With this information, we can determine which process the handles are pointing to, which process owns the handle, the ACCESS_MASK of all handles, and more.
 
-I used direct syscalls for pretty much everything. It wasn't really necessary for the repository but I figured that some people might want it that way.
+I used direct syscalls for pretty much everything. It wasn't really necessary for the repository but I figured that some people might want it that way. And just to be clear I'm pretty sure I missed a couple things I could've used syscalls for that I didn't.
 
 The first step we take is to make sure that the handle we’re inspecting does not belong to our process, and that the handle contains at least one of these access rights (you can add/remove access rights; I did it this way just because):
 - PROCESS_ALL_ACCESS `CAN WRITE TO PROCESS MEMORY`
