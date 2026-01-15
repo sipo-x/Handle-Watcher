@@ -1,5 +1,5 @@
 # Handle-Watcher
-*old project, i probably did it a year before i made the repo so if its ass just let it be*
+*old project, i probably did it 2 years before i made this repo so if its ass just let it be*
 
 Handle Watcher is a C++ program designed to close process handles pointing to its process that have dangerous access rights. It serves as an alternative for ObRegisterCallbacks and it's purpose is to block memory from being accessed by tools like, but not limited to:
 - Cheat Engine
